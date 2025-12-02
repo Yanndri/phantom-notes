@@ -31,21 +31,7 @@ class PhantomNotes {
   }
 
   setupCursorGlow() {
-    const cursorGlow = document.getElementById('cursorGlow');
-    
-    document.addEventListener('mousemove', (e) => {
-      cursorGlow.style.left = (e.clientX - 15) + 'px';
-      cursorGlow.style.top = (e.clientY - 15) + 'px';
-    });
-
-    // Hide cursor glow when mouse leaves window
-    document.addEventListener('mouseleave', () => {
-      cursorGlow.style.opacity = '0';
-    });
-
-    document.addEventListener('mouseenter', () => {
-      cursorGlow.style.opacity = '1';
-    });
+    // No longer needed - using CSS cursor instead
   }
 
   createNote() {
@@ -53,8 +39,8 @@ class PhantomNotes {
       id: ++this.noteIdCounter,
       title: '',
       content: '',
-      x: Math.random() * (window.innerWidth - 300) + 50,
-      y: Math.random() * (window.innerHeight - 400) + 150,
+      x: window.innerWidth - 300, // Top right position (note width is 250px + margin)
+      y: 200, // Below header
       timestamp: new Date().toLocaleString()
     };
 
@@ -172,9 +158,13 @@ class PhantomNotes {
         isDragging = true;
         noteElement.classList.add('dragging');
         
-        const rect = noteElement.getBoundingClientRect();
-        dragOffset.x = e.clientX - rect.left;
-        dragOffset.y = e.clientY - rect.top;
+        // Get current position of the note
+        const currentX = parseInt(noteElement.style.left) || 0;
+        const currentY = parseInt(noteElement.style.top) || 0;
+        
+        // Calculate offset from current position
+        dragOffset.x = e.clientX - currentX;
+        dragOffset.y = e.clientY - currentY;
 
         e.preventDefault();
       };
@@ -182,15 +172,17 @@ class PhantomNotes {
       const drag = (e) => {
         if (!isDragging) return;
 
-        const x = e.clientX - dragOffset.x;
-        const y = e.clientY - dragOffset.y;
+        // Calculate new position maintaining the exact click offset
+        let x = e.clientX - dragOffset.x;
+        let y = e.clientY - dragOffset.y;
 
-        // Keep note within viewport bounds
-        const maxX = window.innerWidth - noteElement.offsetWidth;
-        const maxY = window.innerHeight - noteElement.offsetHeight;
+        // No grid snapping during drag - smooth movement
+        // Allow notes to go anywhere on screen - no Y restrictions
+        const maxX = window.innerWidth - 50;
+        const maxY = window.innerHeight + 500; // Allow way below screen
         
-        const boundedX = Math.max(0, Math.min(x, maxX));
-        const boundedY = Math.max(0, Math.min(y, maxY));
+        const boundedX = Math.max(-50, Math.min(x, maxX));
+        const boundedY = Math.max(0, Math.min(y, maxY)); // Allow Y=0 (top of screen)
 
         noteElement.style.left = boundedX + 'px';
         noteElement.style.top = boundedY + 'px';
@@ -201,9 +193,70 @@ class PhantomNotes {
         
         isDragging = false;
         noteElement.classList.remove('dragging');
+        noteElement.classList.add('positioning');
         
-        const x = parseInt(noteElement.style.left);
-        const y = parseInt(noteElement.style.top);
+        // Aggressive snap to nearby notes for perfect alignment
+        let x = parseInt(noteElement.style.left);
+        let y = parseInt(noteElement.style.top);
+        
+        console.log('Current position before snap:', x, y);
+        
+        // Less aggressive snapping - more natural feel
+        const rowSnapDistance = 40; // Reduced from 100 to 40
+        const colSnapDistance = 30;  // Reduced from 60 to 30
+        const allNotes = document.querySelectorAll('.phantom-note:not(.positioning)');
+        
+        let targetY = null;
+        let targetX = null;
+        
+        // First pass: Look for row alignment (Y position)
+        allNotes.forEach(otherNote => {
+          if (otherNote === noteElement) return;
+          
+          const otherY = parseInt(otherNote.style.top) || 0;
+          const yDistance = Math.abs(y - otherY);
+          
+          // Very generous row snapping
+          if (yDistance < rowSnapDistance) {
+            targetY = otherY;
+            console.log('ROW SNAP: Will snap to Y:', otherY, 'distance was:', yDistance);
+          }
+        });
+        
+        // Second pass: Look for column alignment (X position) only if not too close
+        allNotes.forEach(otherNote => {
+          if (otherNote === noteElement) return;
+          
+          const otherX = parseInt(otherNote.style.left) || 0;
+          const xDistance = Math.abs(x - otherX);
+          
+          if (xDistance < colSnapDistance) {
+            targetX = otherX;
+            console.log('COLUMN SNAP: Will snap to X:', otherX, 'distance was:', xDistance);
+          }
+        });
+        
+        // Apply snapping - ROW FIRST (most important)
+        if (targetY !== null) {
+          y = targetY;
+          console.log('✅ SNAPPED TO ROW Y:', targetY);
+        }
+        
+        if (targetX !== null) {
+          x = targetX;
+          console.log('✅ SNAPPED TO COLUMN X:', targetX);
+        }
+        
+        // Force the position update
+        noteElement.style.left = x + 'px';
+        noteElement.style.top = y + 'px';
+        noteElement.style.transform = 'none'; // Remove any transforms that might interfere
+        
+        // Remove positioning class after a delay
+        setTimeout(() => {
+          noteElement.classList.remove('positioning');
+        }, 200);
+        
         this.updateNotePosition(noteId, x, y);
       };
 
