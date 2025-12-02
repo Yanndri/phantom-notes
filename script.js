@@ -13,6 +13,7 @@ class PhantomNotes {
     this.loadNotes();
     this.setupEventListeners();
     this.setupCursorGlow();
+    this.createFormattingToolbar();
     this.renderNotes();
   }
 
@@ -32,6 +33,136 @@ class PhantomNotes {
 
   setupCursorGlow() {
     // No longer needed - using CSS cursor instead
+  }
+
+  createFormattingToolbar() {
+    // Create single floating toolbar
+    const toolbar = document.createElement('div');
+    toolbar.id = 'floatingToolbar';
+    toolbar.className = 'formatting-toolbar floating-toolbar';
+    toolbar.innerHTML = `
+      <button type="button" class="format-btn" data-command="bold" title="Bold (Ctrl+B)">B</button>
+      <button type="button" class="format-btn" data-command="italic" title="Italic (Ctrl+I)">I</button>
+      <button type="button" class="format-btn" data-command="underline" title="Underline (Ctrl+U)">U</button>
+      <button type="button" class="format-btn" data-command="strikeThrough" title="Strikethrough">S</button>
+      <div class="toolbar-separator"></div>
+      <button type="button" class="format-btn" data-command="justifyLeft" title="Align Left">⬅</button>
+      <button type="button" class="format-btn" data-command="justifyCenter" title="Align Center">⬌</button>
+      <button type="button" class="format-btn" data-command="justifyRight" title="Align Right">➡</button>
+      <div class="toolbar-separator"></div>
+      <button type="button" class="format-btn" data-command="insertUnorderedList" title="Bullet List">•</button>
+      <button type="button" class="format-btn" data-command="insertOrderedList" title="Numbered List">1.</button>
+      <div class="toolbar-separator"></div>
+      <button type="button" class="format-btn" data-command="subscript" title="Subscript">X₂</button>
+      <button type="button" class="format-btn" data-command="superscript" title="Superscript">X²</button>
+      <div class="toolbar-separator"></div>
+      <button type="button" class="format-btn" data-command="removeFormat" title="Clear Formatting">⌫</button>
+    `;
+    
+    document.body.appendChild(toolbar);
+    
+    // Handle toolbar clicks
+    toolbar.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('format-btn')) {
+        // Prevent default but allow the click to proceed
+        e.preventDefault();
+      }
+    });
+    
+    toolbar.addEventListener('click', (e) => {
+      if (e.target.classList.contains('format-btn')) {
+        e.preventDefault();
+        
+        // Get the currently active content area
+        const activeNoteId = toolbar.dataset.activeNoteId;
+        const activeContent = document.querySelector(`[data-note-id="${activeNoteId}"] .note-content`);
+        
+        if (activeContent) {
+          // Focus the content area first
+          activeContent.focus();
+          
+          // Apply formatting command
+          const command = e.target.dataset.command;
+          document.execCommand(command);
+          
+          // Update button state
+          this.updateToolbarButtonStates();
+          
+          // Update note content
+          this.updateNote(parseInt(activeNoteId), 'content', activeContent.innerHTML);
+        }
+      }
+    });
+    
+    // Hide toolbar initially
+    toolbar.style.display = 'none';
+    toolbar.style.opacity = '0';
+    toolbar.style.transform = 'translateX(-50%) translateY(-10px)';
+    
+    // Keep toolbar visible when hovering over it
+    toolbar.addEventListener('mouseenter', () => {
+      toolbar.style.display = 'flex';
+      toolbar.style.opacity = '1';
+      toolbar.style.transform = 'translateX(-50%) translateY(0)';
+    });
+    
+    toolbar.addEventListener('mouseleave', () => {
+      if (!document.querySelector('.note-content:focus')) {
+        this.hideFormattingToolbar();
+      }
+    });
+  }
+
+  showFormattingToolbar(contentElement, noteId) {
+    const toolbar = document.getElementById('floatingToolbar');
+    
+    // Show toolbar at fixed position (already positioned via CSS)
+    toolbar.style.display = 'flex';
+    toolbar.style.opacity = '1';
+    toolbar.style.transform = 'translateX(-50%) translateY(0)';
+    
+    // Store current note ID for toolbar actions
+    toolbar.dataset.activeNoteId = noteId;
+  }
+
+  hideFormattingToolbar() {
+    const toolbar = document.getElementById('floatingToolbar');
+    // Add a small delay to prevent flickering when moving between note elements
+    setTimeout(() => {
+      if (!document.querySelector('.note-content:focus') && !toolbar.matches(':hover')) {
+        toolbar.style.opacity = '0';
+        toolbar.style.transform = 'translateX(-50%) translateY(-10px)';
+        setTimeout(() => {
+          if (toolbar.style.opacity === '0') {
+            toolbar.style.display = 'none';
+          }
+        }, 300);
+      }
+    }, 100);
+  }
+
+  updateToolbarButtonStates() {
+    const toolbar = document.getElementById('floatingToolbar');
+    const buttons = toolbar.querySelectorAll('.format-btn');
+    
+    buttons.forEach(button => {
+      const command = button.dataset.command;
+      let isActive = false;
+      
+      try {
+        // Check if the current selection has this formatting
+        isActive = document.queryCommandState(command);
+      } catch (e) {
+        // Fallback for browsers that don't support queryCommandState
+        isActive = false;
+      }
+      
+      if (isActive) {
+        button.classList.add('active');
+      } else {
+        button.classList.remove('active');
+      }
+    });
   }
 
   createNote() {
@@ -100,7 +231,7 @@ class PhantomNotes {
     container.innerHTML = this.notes.map(note => `
       <div class="phantom-note" 
            data-note-id="${note.id}"
-           style="left: ${note.x}px; top: ${note.y}px;">
+           style="left: ${note.x}px; top: ${note.y}px; ${note.width ? `width: ${note.width}px;` : ''} ${note.height ? `height: ${note.height}px;` : ''}">
         <div class="note-header">
           <input type="text" 
                  class="note-title" 
@@ -109,10 +240,12 @@ class PhantomNotes {
                  data-field="title">
           <button class="delete-btn" data-action="delete">×</button>
         </div>
-        <textarea class="note-content" 
-                  placeholder="Your ghostly thoughts drift here..."
-                  data-field="content">${note.content}</textarea>
+        <div class="note-content" 
+             contenteditable="true"
+             placeholder="Your ghostly thoughts drift here..."
+             data-field="content">${note.content || ''}</div>
         <div class="note-timestamp">${note.timestamp}</div>
+        <div class="resize-corner"></div>
       </div>
     `).join('');
 
@@ -135,61 +268,192 @@ class PhantomNotes {
       // Input events
       const titleInput = noteElement.querySelector('[data-field="title"]');
       const contentTextarea = noteElement.querySelector('[data-field="content"]');
+      
+      // Show formatting toolbar only when hovering over content area
+      contentTextarea.addEventListener('mouseenter', (e) => {
+        this.showFormattingToolbar(contentTextarea, noteId);
+      });
+      
+      contentTextarea.addEventListener('mouseleave', (e) => {
+        // Only hide if not hovering over toolbar
+        if (!e.relatedTarget || !e.relatedTarget.closest('.floating-toolbar')) {
+          this.hideFormattingToolbar();
+        }
+      });
+      
+      // Also show on focus for keyboard users
+      contentTextarea.addEventListener('focus', (e) => {
+        this.showFormattingToolbar(e.target, noteId);
+      });
+      
+      // Store the active note when content is clicked/focused
+      contentTextarea.addEventListener('mousedown', () => {
+        const toolbar = document.getElementById('floatingToolbar');
+        toolbar.dataset.activeNoteId = noteId;
+      });
+      
+      contentTextarea.addEventListener('focus', () => {
+        const toolbar = document.getElementById('floatingToolbar');
+        toolbar.dataset.activeNoteId = noteId;
+      });
+      
+      // Update toolbar button states when cursor moves or selection changes
+      contentTextarea.addEventListener('keyup', () => {
+        this.updateToolbarButtonStates();
+      });
+      
+      contentTextarea.addEventListener('mouseup', () => {
+        this.updateToolbarButtonStates();
+      });
+      
+      contentTextarea.addEventListener('selectionchange', () => {
+        this.updateToolbarButtonStates();
+      });
 
       titleInput.addEventListener('input', (e) => {
         this.updateNote(noteId, 'title', e.target.value);
       });
 
       contentTextarea.addEventListener('input', (e) => {
-        this.updateNote(noteId, 'content', e.target.value);
+        this.updateNote(noteId, 'content', e.target.innerHTML);
       });
 
-      // Dragging functionality
+      // Add rich text formatting shortcuts
+      contentTextarea.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+          switch(e.key.toLowerCase()) {
+            case 'b':
+              e.preventDefault();
+              document.execCommand('bold');
+              this.updateNote(noteId, 'content', contentTextarea.innerHTML);
+              break;
+            case 'i':
+              e.preventDefault();
+              document.execCommand('italic');
+              this.updateNote(noteId, 'content', contentTextarea.innerHTML);
+              break;
+            case 'u':
+              e.preventDefault();
+              document.execCommand('underline');
+              this.updateNote(noteId, 'content', contentTextarea.innerHTML);
+              break;
+            case 'l':
+              e.preventDefault();
+              document.execCommand('justifyLeft');
+              this.updateNote(noteId, 'content', contentTextarea.innerHTML);
+              break;
+            case 'e':
+              e.preventDefault();
+              document.execCommand('justifyCenter');
+              this.updateNote(noteId, 'content', contentTextarea.innerHTML);
+              break;
+            case 'r':
+              e.preventDefault();
+              document.execCommand('justifyRight');
+              this.updateNote(noteId, 'content', contentTextarea.innerHTML);
+              break;
+          }
+        }
+      });
+
+      // Dragging and resizing functionality
       let isDragging = false;
+      let isResizing = false;
       let dragOffset = { x: 0, y: 0 };
+      let resizeStart = { width: 0, height: 0, mouseX: 0, mouseY: 0 };
+      let dragTimeout = null;
 
       const startDrag = (e) => {
+        // Only allow dragging from specific areas
         if (e.target.classList.contains('note-title') || 
             e.target.classList.contains('note-content') ||
-            e.target.classList.contains('delete-btn')) {
+            e.target.classList.contains('delete-btn') ||
+            e.target.classList.contains('format-btn') ||
+            e.target.classList.contains('formatting-toolbar') ||
+            e.target.classList.contains('note-timestamp')) {
           return;
         }
 
-        isDragging = true;
-        noteElement.classList.add('dragging');
-        
-        // Get current position of the note
-        const currentX = parseInt(noteElement.style.left) || 0;
-        const currentY = parseInt(noteElement.style.top) || 0;
-        
-        // Calculate offset from current position
-        dragOffset.x = e.clientX - currentX;
-        dragOffset.y = e.clientY - currentY;
-
-        e.preventDefault();
+        // Check if clicking the resize corner
+        if (e.target.classList.contains('resize-corner')) {
+          // Start resizing
+          isResizing = true;
+          noteElement.classList.add('resizing');
+          
+          resizeStart.width = noteElement.offsetWidth;
+          resizeStart.height = noteElement.offsetHeight;
+          resizeStart.mouseX = e.clientX;
+          resizeStart.mouseY = e.clientY;
+          e.preventDefault();
+        } else if (e.target === noteElement) {
+          // Only start dragging from note background
+          // Add a small delay to distinguish from accidental clicks
+          dragTimeout = setTimeout(() => {
+            isDragging = true;
+            noteElement.classList.add('dragging');
+            
+            // Get current position of the note
+            const currentX = parseInt(noteElement.style.left) || 0;
+            const currentY = parseInt(noteElement.style.top) || 0;
+            
+            // Calculate offset from current position
+            dragOffset.x = e.clientX - currentX;
+            dragOffset.y = e.clientY - currentY;
+          }, 100); // 100ms delay
+          
+          e.preventDefault();
+        }
       };
 
       const drag = (e) => {
-        if (!isDragging) return;
+        if (isDragging) {
+          // Calculate new position maintaining the exact click offset
+          let x = e.clientX - dragOffset.x;
+          let y = e.clientY - dragOffset.y;
 
-        // Calculate new position maintaining the exact click offset
-        let x = e.clientX - dragOffset.x;
-        let y = e.clientY - dragOffset.y;
+          // No grid snapping during drag - smooth movement
+          // Allow notes to go anywhere on screen - no Y restrictions
+          const maxX = window.innerWidth - 50;
+          const maxY = window.innerHeight + 500; // Allow way below screen
+          
+          const boundedX = Math.max(-50, Math.min(x, maxX));
+          const boundedY = Math.max(0, Math.min(y, maxY)); // Allow Y=0 (top of screen)
 
-        // No grid snapping during drag - smooth movement
-        // Allow notes to go anywhere on screen - no Y restrictions
-        const maxX = window.innerWidth - 50;
-        const maxY = window.innerHeight + 500; // Allow way below screen
-        
-        const boundedX = Math.max(-50, Math.min(x, maxX));
-        const boundedY = Math.max(0, Math.min(y, maxY)); // Allow Y=0 (top of screen)
-
-        noteElement.style.left = boundedX + 'px';
-        noteElement.style.top = boundedY + 'px';
+          noteElement.style.left = boundedX + 'px';
+          noteElement.style.top = boundedY + 'px';
+        } else if (isResizing) {
+          // Calculate new size based on mouse movement
+          const deltaX = e.clientX - resizeStart.mouseX;
+          const deltaY = e.clientY - resizeStart.mouseY;
+          
+          const newWidth = Math.max(200, resizeStart.width + deltaX);
+          const newHeight = Math.max(150, resizeStart.height + deltaY);
+          
+          noteElement.style.width = newWidth + 'px';
+          noteElement.style.height = newHeight + 'px';
+        }
       };
 
       const endDrag = () => {
-        if (!isDragging) return;
+        // Clear drag timeout if it exists
+        if (dragTimeout) {
+          clearTimeout(dragTimeout);
+          dragTimeout = null;
+        }
+        
+        if (!isDragging && !isResizing) return;
+        
+        if (isResizing) {
+          isResizing = false;
+          noteElement.classList.remove('resizing');
+          
+          // Save the new size
+          const width = noteElement.offsetWidth;
+          const height = noteElement.offsetHeight;
+          this.updateNote(noteId, 'width', width);
+          this.updateNote(noteId, 'height', height);
+          return;
+        }
         
         isDragging = false;
         noteElement.classList.remove('dragging');
