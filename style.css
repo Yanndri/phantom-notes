@@ -508,6 +508,37 @@ body {
   scrollbar-color: rgba(138, 43, 226, 0.6) rgba(138, 43, 226, 0.1);
 }
 
+/* Roaming Fly - Optimized and Reactive */
+.fly {
+  position: fixed;
+  font-size: 16px;
+  pointer-events: none;
+  z-index: 9999;
+  transition: left 1.5s ease-in-out, top 1.5s ease-in-out, font-size 1s ease-out;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.3));
+  user-select: none;
+  transform-origin: center center;
+}
+
+/* Wing flapping animation when flying */
+.fly.flying {
+  animation: flyWings 0.1s steps(2) infinite;
+  font-size: 20px;
+  transition: left 1.5s ease-in-out, top 1.5s ease-in-out, font-size 1s ease-out;
+}
+
+@keyframes flyWings {
+  0% { 
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.3)) brightness(1);
+  }
+  50% { 
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.3)) brightness(1.2);
+  }
+  100% { 
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.3)) brightness(1);
+  }
+}
+
 .note-content::placeholder {
   color: rgba(224, 224, 224, 0.4);
   font-style: italic;
